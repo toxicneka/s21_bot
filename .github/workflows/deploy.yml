@@ -1,0 +1,29 @@
+name: deploy
+
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: install ssh key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: |
+            ${{ secrets.SSH_KEY_DEV1 }}
+
+      - name: cd
+        run: |
+          ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << 'EOF'
+          cd /root/bots/s21_bot
+          git pull origin main
+          source .venv/bin/activate
+          pip install -r requirements.txt
+          kill $(cat bot.pid) 2>/dev/null || true
+          nohup python3 main.py > bot.log 2>&1 & echo $! > bot.pid
+          
