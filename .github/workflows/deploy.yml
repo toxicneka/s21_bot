@@ -21,9 +21,10 @@ jobs:
         run: |
           ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << 'EOF'
           cd /root/bots/s21_bot
+          systemctl stop s21_bot
           git pull origin main
+          python3 -m venv .venv
           source .venv/bin/activate
           pip install -r requirements.txt
-          kill $(cat bot.pid) 2>/dev/null || true
-          nohup python3 main.py > bot.log 2>&1 & echo $! > bot.pid
+          systemctl start s21_bot
           
