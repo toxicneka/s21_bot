@@ -20,11 +20,17 @@ jobs:
       - name: cd
         run: |
           ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << 'EOF'
-          cd /root/bots/s21_bot
-          systemctl stop s21_bot
+          set -e
+          cd /root/bots/s21_bot || exit 1
+          echo "Боту араарабын"
+          sudo systemctl stop s21_bot || echo "Бот то5о эрэ улэлээн буппэтэ"
+          echo "Пулли гынабын..."
           git pull origin main
-          python3 -m venv .venv
+          echo "Виртуальнай окруженияны обновляйдыыбын..."
+          python3 -m venv .venv --updgrade
           source .venv/bin/activate
-          pip install -r requirements.txt
-          systemctl start s21_bot
-          
+          pip install -r requirements.txt --updgrade
+          echo "Боту холбуубун"
+          sudo systemctl start s21_bot
+          echo "Барыта учугэй"
+          EOF
