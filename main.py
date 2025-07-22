@@ -11,16 +11,16 @@ import asyncio
 import requests
 import re
 from html import escape
-#from config import TOKEN, MAIN_ADMIN_ID, login_token, password_token, GOOGLE_SHEETS_CREDS, SPREADSHEET_KEY
+from config import TOKEN, MAIN_ADMIN_ID, login_token, password_token, GOOGLE_SHEETS_CREDS, SPREADSHEET_KEY
 
 #Добавил секреты в переменные окружения
-import os
-TOKEN = os.getenv("S21_BOT_TOKEN")
-MAIN_ADMIN_ID = os.getenv("S21_BOT_MAIN_ADMIN_ID")
-login_token = os.getenv("S21_BOT_login_token")
-password_token = os.getenv("S21_BOT_password_token")
-GOOGLE_SHEETS_CREDS = os.getenv("S21_BOT_GOOGLE_SHEETS_CREDS")
-SPREADSHEET_KEY = os.getenv("S21_BOT_SPREADSHEET_KEY")
+# import os
+# TOKEN = os.getenv("S21_BOT_TOKEN")
+# MAIN_ADMIN_ID = os.getenv("S21_BOT_MAIN_ADMIN_ID")
+# login_token = os.getenv("S21_BOT_login_token")
+# password_token = os.getenv("S21_BOT_password_token")
+# GOOGLE_SHEETS_CREDS = os.getenv("S21_BOT_GOOGLE_SHEETS_CREDS")
+# SPREADSHEET_KEY = os.getenv("S21_BOT_SPREADSHEET_KEY")
 
 # dfgfh
 # logging.basicConfig(level=logging.INFO)
