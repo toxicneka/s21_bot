@@ -16,7 +16,7 @@ from html import escape
 #Добавил секреты в переменные окружения
 import os
 TOKEN = os.getenv("S21_BOT_TOKEN")
-MAIN_ADMIN_ID = int(os.getenv("S21_BOT_MAIN_ADMIN_ID"))
+MAIN_ADMIN_ID = os.getenv("S21_BOT_MAIN_ADMIN_ID")
 login_token = os.getenv("S21_BOT_login_token")
 password_token = os.getenv("S21_BOT_password_token")
 GOOGLE_SHEETS_CREDS = os.getenv("S21_BOT_GOOGLE_SHEETS_CREDS")
