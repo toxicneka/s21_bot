@@ -26,7 +26,8 @@ jobs:
           sudo systemctl stop s21_bot || echo "Бот то5о эрэ улэлээн буппэтэ"
           echo "Пулли гынабын..."
           ssh-keyscan github.com >> ~/.ssh/known_hosts
-          git pull origin main
+          git fetch --all
+          git reset --hard origin/main
           echo "Виртуальнай окруженияны обновляйдыыбын..."
           python3 -m venv .venv --updgrade
           source .venv/bin/activate
