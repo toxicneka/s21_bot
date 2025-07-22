@@ -29,9 +29,9 @@ jobs:
           git fetch --all
           git reset --hard origin/main
           echo "Виртуальнай окруженияны обновляйдыыбын..."
-          python3 -m venv .venv --updgrade
+          python3 -m venv .venv
           source .venv/bin/activate
-          pip install -r requirements.txt --updgrade
+          pip install -r requirements.txt
           echo "Боту холбуубун"
           sudo systemctl start s21_bot
           echo "Барыта учугэй"
