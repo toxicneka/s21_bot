@@ -23,7 +23,7 @@ jobs:
           set -e
           cd /root/bots/s21_bot || exit 1
           echo "Боту араарабын"
-          sudo systemctl stop s21_bot || echo "Бот то5о эрэ улэлээн буппэтэ"
+          kill $(cat /root/bots/s21_bot/bot.pid) 2>/dev/null || true
           echo "Пулли гынабын..."
           ssh-keyscan github.com >> ~/.ssh/known_hosts
           git fetch --all
@@ -33,6 +33,7 @@ jobs:
           source .venv/bin/activate
           pip install -r requirements.txt
           echo "Боту холбуубун"
-          sudo systemctl start s21_bot
+          nohup .venv/bin/python -u main.py > bot.log 2>&1 &
+          echo $! > bot.pid
           echo "Барыта учугэй"
           EOF
