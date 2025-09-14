@@ -16,7 +16,7 @@ from dotenv import load_dotenv
 
 load_dotenv()  # Загружаем переменные из .env
 
-TOKEN = os.getenv("BOT_TOKEN")
+TOKEN = os.getenv("TOKEN")
 MAIN_ADMIN_ID = os.getenv("MAIN_ADMIN_ID")
 login_token = os.getenv("login_token")
 password_token = os.getenv("password_token")
