@@ -2,7 +2,7 @@ name: deploy
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [main]
 
 jobs:
   deploy:
@@ -11,29 +11,42 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: install ssh key
-        uses: webfactory/ssh-agent@v0.9.0
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
-          ssh-private-key: |
-            ${{ secrets.SSH_KEY_DEV1 }}
+          python-version: '3.11'
 
-      - name: cd
+      - name: Prepare .env file
         run: |
-          ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << 'EOF'
-          set -e
-          cd /root/bots/s21_bot || exit 1
-          echo "Боту араарабын"
-          kill $(cat /root/bots/s21_bot/bot.pid) 2>/dev/null || true
-          echo "Пулли гынабын..."
-          ssh-keyscan github.com >> ~/.ssh/known_hosts
-          git fetch --all
-          git reset --hard origin/main
-          echo "Виртуальнай окруженияны обновляйдыыбын..."
-          python3 -m venv .venv
-          source .venv/bin/activate
-          pip install -r requirements.txt
-          echo "Боту холбуубун"
-          nohup .venv/bin/python -u main.py > bot.log 2>&1 &
-          echo $! > bot.pid
-          echo "Барыта учугэй"
-          EOF
+          echo "TOKEN=${{ secrets.TOKEN }}" > .env
+          echo "MAIN_ADMIN_ID=${{ secrets.MAIN_ADMIN_ID }}" >> .env
+          echo "GOOGLE_SHEETS_CREDS=google_creds.json" >> .env
+          echo "SPREADSHEET_KEY=${{ secrets.SPREADSHEET_KEY }}" >> .env
+          echo "login_token=${{ secrets.login_token }}" >> .env
+          echo "password_token=${{ secrets.password_token }}" >> .env
+
+      - name: Prepare service account file
+        env:
+          GOOGLE_CREDS_JSON: ${{ secrets.GOOGLE_CREDS_JSON }}
+        run: |
+          echo "$GOOGLE_CREDS_JSON" > google_creds.json
+
+      - name: Copy files to server
+        uses: appleboy/scp-action@v1
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY_DEV1 }}
+          source: "."
+          target: "/root/bots/s21_bot"
+
+      - name: Restart s21_bot service
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY_DEV1 }}
+          script: |
+            cd /root/bots/s21_bot
+            pip install -r requirements.txt
+            sudo systemctl restart s21_bot.service
