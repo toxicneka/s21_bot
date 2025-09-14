@@ -13,6 +13,8 @@ import re
 from html import escape
 import os
 
+load_dotenv()  # Загружаем переменные из .env
+
 TOKEN = os.getenv("BOT_TOKEN")
 MAIN_ADMIN_ID = os.getenv("MAIN_ADMIN_ID")
 login_token = os.getenv("login_token")
