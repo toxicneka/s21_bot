@@ -23,8 +23,8 @@ password_token = os.getenv("password_token")
 GOOGLE_SHEETS_CREDS = os.getenv("GOOGLE_SHEETS_CREDS")
 SPREADSHEET_KEY = os.getenv("SPREADSHEET_KEY")
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+# logging.basicConfig(level=logging.INFO)
+# logger = logging.getLogger(__name__)
 
 # Инициализация Google Sheets API
 scope = ['https://spreadsheets.google.com/feeds',
