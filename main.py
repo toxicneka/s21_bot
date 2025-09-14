@@ -1,19 +1,9 @@
 import asyncio
-import os
 from aiogram import Bot, Dispatcher
-from dotenv import load_dotenv
 from handlers.handlers import dp
 from services.google_sheets_service import GoogleSheetsService
 from utils.helpers import set_main_menu
-
-load_dotenv()
-
-TOKEN = os.getenv("TOKEN")
-MAIN_ADMIN_ID = os.getenv("MAIN_ADMIN_ID")
-login_token = os.getenv("login_token")
-password_token = os.getenv("password_token")
-GOOGLE_SHEETS_CREDS = os.getenv("GOOGLE_SHEETS_CREDS")
-SPREADSHEET_KEY = os.getenv("SPREADSHEET_KEY")
+from config import TOKEN, MAIN_ADMIN_ID, login_token, password_token, GOOGLE_SHEETS_CREDS, SPREADSHEET_KEY
 
 bot = Bot(token=TOKEN)
 

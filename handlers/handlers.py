@@ -11,7 +11,7 @@ import asyncio
 import requests
 import re
 from html import escape
-import os
+from config import MAIN_ADMIN_ID, login_token, password_token
 
 from utils.states import Form
 from utils.helpers import (
@@ -30,7 +30,7 @@ BANNED_USERS_FILE = "banned_users.txt"
 
 @dp.message(Command("ban"))
 async def cmd_ban(message: Message):
-    if message.from_user.id != int(os.getenv("MAIN_ADMIN_ID")):
+    if message.from_user.id != int(MAIN_ADMIN_ID):
         await message.answer("У вас нет прав для выполнения этой команды ⛔")
         return
 
@@ -61,7 +61,7 @@ async def cmd_ban(message: Message):
 
 @dp.message(Command("unban"))
 async def cmd_unban(message: Message):
-    if message.from_user.id != int(os.getenv("MAIN_ADMIN_ID")):
+    if message.from_user.id != int(MAIN_ADMIN_ID):
         await message.answer("У вас нет прав для выполнения этой команды ⛔")
         return
 
@@ -93,7 +93,7 @@ async def cmd_unban(message: Message):
 
 @dp.message(Command("broadcast"))
 async def cmd_broadcast(message: Message, state: FSMContext):
-    if message.from_user.id != int(os.getenv("MAIN_ADMIN_ID")):
+    if message.from_user.id != int(MAIN_ADMIN_ID):
         await message.answer("У вас нет прав для использования этой команды ⛔")
         return
     await state.set_state(Form.waiting_for_broadcast)
@@ -329,7 +329,7 @@ async def handle_campus_command(message: Message):
     if await check_ban(message.from_user.id, message=message):
         return
 
-    token = await get_access_token(os.getenv("login_token"), os.getenv("password_token"))
+    token = await get_access_token(login_token, password_token)
     if not token:
         await message.answer("Ошибка аутентификации ❌\n\nПроверьте логин и пароль")
         return

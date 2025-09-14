@@ -4,6 +4,7 @@ from oauth2client.service_account import ServiceAccountCredentials
 import asyncio
 import requests
 from datetime import datetime, timedelta
+from config import login_token, password_token
 
 class GoogleSheetsService:
     def __init__(self, creds_file, spreadsheet_key):
@@ -148,7 +149,7 @@ class GoogleSheetsService:
         while True:
             try:
                 # Получаем список присутствующих
-                token = await self.get_access_token(os.getenv("login_token"), os.getenv("password_token"))
+                token = await self.get_access_token(login_token, password_token)
                 if not token:
                     await asyncio.sleep(60)
                     continue
