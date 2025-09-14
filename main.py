@@ -12,6 +12,7 @@ import requests
 import re
 from html import escape
 import os
+from dotenv import load_dotenv
 
 load_dotenv()  # Загружаем переменные из .env
 
