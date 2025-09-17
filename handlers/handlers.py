@@ -1,4 +1,5 @@
 import logging
+import aiohttp
 from datetime import datetime, timedelta
 from aiogram import Bot, Dispatcher, F
 from aiogram.filters import CommandStart, Command
@@ -312,20 +313,29 @@ async def get_access_token(login_token: str, password_token: str) -> str:
         'password': password_token,
         'grant_type': 'password'
     }
-    response = requests.post(url, headers=headers, data=data)
-    if response.status_code == 200:
-        return response.json().get('access_token')
-    return None
+
+    async with aiohttp.ClientSession() as session:
+        async with session.post(url, headers=headers, data=data) as response:
+            if response.status == 200:
+                json_response = await response.json()
+                return json_response.get('access_token')
+            else:
+                print(f"Ошибка аутентификации: {response.status}")
+                return None
+
 
 async def get_cluster_info(cluster_id: str, token: str) -> dict:
     url = f"https://platform.21-school.ru/services/21-school/api/v1/clusters/{cluster_id}/map?limit=100&offset=0"
     headers = {'Authorization': f'Bearer {token}'}
-    response = requests.get(url, headers=headers)
-    print(response)
-    if response.status_code == 200:
-        print("check platform")
-        return response.json()
-    return None
+
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url, headers=headers) as response:
+            if response.status == 200:
+                return await response.json()
+            else:
+                print(f"Ошибка загрузки кластера {cluster_id}: {response.status}")
+                return None
+
 
 async def handle_campus_command(message: Message):
     if await check_ban(message.from_user.id, message=message):
