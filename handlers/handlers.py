@@ -321,7 +321,9 @@ async def get_cluster_info(cluster_id: str, token: str) -> dict:
     url = f"https://platform.21-school.ru/services/21-school/api/v1/clusters/{cluster_id}/map?limit=100&offset=0"
     headers = {'Authorization': f'Bearer {token}'}
     response = requests.get(url, headers=headers)
+    print(response)
     if response.status_code == 200:
+        print("check platform")
         return response.json()
     return None
 
