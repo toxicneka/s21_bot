@@ -313,7 +313,6 @@ async def get_access_token(login_token: str, password_token: str) -> str:
         'grant_type': 'password'
     }
     response = requests.post(url, headers=headers, data=data)
-    print(response.json())
     if response.status_code == 200:
         return response.json().get('access_token')
     return None
@@ -323,7 +322,6 @@ async def get_cluster_info(cluster_id: str, token: str) -> dict:
     print(cluster_id)
     headers = {'Authorization': f'Bearer {token}'}
     response = requests.get(url, headers=headers)
-    print(response.json())
     if response.status_code == 200:
         print("check platform")
         return response.json()
