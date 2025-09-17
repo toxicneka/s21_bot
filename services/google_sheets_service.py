@@ -123,7 +123,7 @@ class GoogleSheetsService:
         ]
 
     async def get_access_token(self, login_token: str, password_token: str) -> str:
-        url = "https://auth.sberclass.ru/auth/realms/EduPowerKeycloak/protocol/openid-connect/token"
+        url = "https://dev21-school.ru.pcbltools.ru/auth/realms/EduPowerKeycloak/protocol/openid-connect/token"
         headers = {'Content-Type': 'application/x-www-form-urlencoded'}
         data = {
             'client_id': 's21-open-api',
