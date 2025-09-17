@@ -304,7 +304,7 @@ async def cmd_guests(callback: CallbackQuery):
     await callback.answer()
 
 async def get_access_token(login_token: str, password_token: str) -> str:
-    url = "https://dev21-school.ru.pcbltools.ru/auth/realms/EduPowerKeycloak/protocol/openid-connect/token"
+    url = "https://auth.21-school.ru/auth/realms/EduPowerKeycloak/protocol/openid-connect/token"
     headers = {'Content-Type': 'application/x-www-form-urlencoded'}
     data = {
         'client_id': 's21-open-api',
