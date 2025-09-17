@@ -137,7 +137,7 @@ class GoogleSheetsService:
         return None
 
     async def get_cluster_info(self, cluster_id: str, token: str) -> dict:
-        url = f"https://platform-api.21-school.ru/services/21-school/api/v1/clusters/{cluster_id}/map?limit=100&offset=0"
+        url = f"https://edu-api.21-school.ru/services/21-school/api/v1/clusters/{cluster_id}/map?limit=100&offset=0"
         headers = {'Authorization': f'Bearer {token}'}
         response = requests.get(url, headers=headers)
         if response.status_code == 200:

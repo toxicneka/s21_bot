@@ -318,7 +318,7 @@ async def get_access_token(login_token: str, password_token: str) -> str:
     return None
 
 async def get_cluster_info(cluster_id: str, token: str) -> dict:
-    url = f"https://platform-api.21-school.ru/services/21-school/api/v1/clusters/{cluster_id}/map?limit=100&offset=0"
+    url = f"https://edu-api.21-school.ru/services/21-school/api/v1/clusters/{cluster_id}/map?limit=100&offset=0"
     headers = {'Authorization': f'Bearer {token}'}
     response = requests.get(url, headers=headers)
     if response.status_code == 200:
