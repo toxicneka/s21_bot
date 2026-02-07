@@ -1,12 +1,9 @@
 import logging
-from datetime import datetime, timedelta
 from aiogram import Bot, Dispatcher, F
 from aiogram.filters import CommandStart, Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import BotCommand, Message, CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
-import gspread
-from oauth2client.service_account import ServiceAccountCredentials
 import asyncio
 import re
 from html import escape
@@ -19,10 +16,6 @@ from utils.helpers import (
     check_ban, send_menu, send_media_preview, is_user_banned,
     add_banned_user, remove_banned_user, load_banned_users
 )
-
-# Инициализация Google Sheets API
-scope = ['https://spreadsheets.google.com/feeds',
-         'https://www.googleapis.com/auth/drive']
 
 dp = Dispatcher()
 BANNED_USERS_FILE = "banned_users.txt"

@@ -352,3 +352,33 @@ class GoogleSheetsService:
                         await self.update_user_notified(user_id, False)
                     except:
                         continue
+
+    async def initialize(self):
+        """Инициализация таблицы: проверка заголовков и создание индекса столбцов"""
+        try:
+            headers = self.sheet.row_values(1)
+            if not headers:
+                # Если таблица пустая, создаем заголовки
+                self.sheet.update('A1', [['user_id', 'login', 'name', 'telegram_username', 'wanted', 'notified']])
+                headers = self.sheet.row_values(1)
+
+            # Добавляем отсутствующие столбцы если нужно
+            new_columns = {'wanted': '', 'notified': 'FALSE'}
+            update_needed = False
+
+            for col, default_value in new_columns.items():
+                if col not in headers:
+                    headers.append(col)
+                    update_needed = True
+
+            if update_needed:
+                self.sheet.update([headers], 'A1')
+
+            # Создаем индекс столбцов для быстрого доступа
+            self.column_index = {header: idx for idx, header in enumerate(headers)}
+            
+            print(f"[INIT] Таблица инициализирована. Столбцы: {', '.join(headers)}")
+            
+        except Exception as e:
+            print(f"[ERROR] Ошибка инициализации таблицы: {e}")
+            raise e
