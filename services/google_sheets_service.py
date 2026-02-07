@@ -140,8 +140,19 @@ class GoogleSheetsService:
                     
                     for i, result in enumerate(results):
                         cluster_id = clusters[i]
+                        cluster_name = cluster_id_to_name.get(cluster_id, cluster_id)
+                        
                         if not result:
+                            print(f"[API] Кластер {cluster_name} ({cluster_id}): Нет данных")
                             continue
+                        
+                        participants_count = len(result.get("clusterMap", []))
+                        print(f"[API] Кластер {cluster_name} ({cluster_id}): {participants_count} участников")
+                        
+                        # Выводим первые 5 логинов для диагностики
+                        if participants_count > 0:
+                            first_logins = [p.get("login", "no_login") for p in result.get("clusterMap", [])[:5]]
+                            print(f"[API]   Примеры логинов: {', '.join(first_logins)}")
                             
                         for participant in result.get("clusterMap", []):
                             login = participant.get("login")
@@ -156,6 +167,8 @@ class GoogleSheetsService:
                                     "cluster_name": cluster_id_to_name.get(cluster_id, cluster_id)
                                 })
                     
+                    print(f"[API] Всего уникальных логинов: {len(present_logins)}")
+                    
                     # Сохраняем в кэш
                     self._campus_data_cache = {
                         "present_logins": present_logins,
@@ -167,10 +180,13 @@ class GoogleSheetsService:
                     # Обновляем кэш для wanted
                     await self._update_wanted_cache(present_logins)
                     
-                    print(f"[API] Данные кампуса обновлены. Пиров: {len(present_logins)}")
+                    print(f"[API] Данные кампуса обновлены. Всего пиров: {len(present_logins)}")
+                    print(f"[API] Кластеры с данными: {', '.join(cluster_map.keys())}")
                     
                 except Exception as e:
                     print(f"[API] Ошибка получения данных кампуса: {e}")
+                    import traceback
+                    traceback.print_exc()
             
             return self._campus_data_cache or {}
     
