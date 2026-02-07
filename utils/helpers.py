@@ -22,7 +22,7 @@ def links_keyboard():
         [InlineKeyboardButton(text="Список специальностей 📕", callback_data="specialties")],
         [InlineKeyboardButton(text="GigaCode 🤖", callback_data="gigacode")],
         [InlineKeyboardButton(text="Правила онлайн проверок 🤼‍♂️", callback_data="p2p")],
-        [InlineKeyboardButton(text="Code Review 📋", callback_data="codereview")],
+        # [InlineKeyboardButton(text="Code Review 📋", callback_data="codereview")],
         [InlineKeyboardButton(text="Выпуск школы 🎓", callback_data="final")],
         [InlineKeyboardButton(text="Как получить коины 💰", callback_data="coins")],
         [InlineKeyboardButton(text="Форма гостя 🎫", callback_data="guests")],
