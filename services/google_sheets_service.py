@@ -242,7 +242,7 @@ class GoogleSheetsService:
                                 print(f"Ошибка отправки уведомления {user_id}: {e}")
                     
                     if notified_count > 0:
-                        print(f"[УВЕДОМЛЕНИЯ] Отправлено {notified_count} уведомлений")
+                        print(f"Отправлено {notified_count} уведомлений")
                 
                 print(f"[ПЕРИОДИЧЕСКАЯ ПРОВЕРКА] Ожидание 5 минут...")
                 await asyncio.sleep(300)
