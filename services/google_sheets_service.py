@@ -209,10 +209,20 @@ class GoogleSheetsService:
     async def _fetch_cluster(self, url, headers, cluster_id):
         """Запрос данных одного кластера"""
         try:
+            print(f"[API] Запрос к кластеру {cluster_id}")
             async with aiohttp.ClientSession() as session:
                 async with session.get(url, headers=headers) as response:
                     if response.status == 200:
-                        return await response.json()
+                        data = await response.json()
+                        
+                        # ВРЕМЕННО: выведем структуру ответа для анализа
+                        if data and "clusterMap" in data and len(data["clusterMap"]) > 0:
+                            print(f"[DEBUG] Структура данных кластера {cluster_id}:")
+                            first_participant = data["clusterMap"][0]
+                            for key, value in first_participant.items():
+                                print(f"  {key}: {value}")
+                        
+                        return data
                     else:
                         print(f"[API] Ошибка кластера {cluster_id}: {response.status}")
                         return None
