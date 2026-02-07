@@ -151,7 +151,10 @@ class GoogleSheetsService:
                         
                         # Выводим первые 5 логинов для диагностики
                         if participants_count > 0:
-                            first_logins = [p.get("login", "no_login") for p in result.get("clusterMap", [])[:5]]
+                            first_logins = []
+                            for p in result.get("clusterMap", [])[:5]:
+                                login = p.get("login")
+                                first_logins.append(login if login is not None else "no_login")
                             print(f"[API]   Примеры логинов: {', '.join(first_logins)}")
                             
                         for participant in result.get("clusterMap", []):
