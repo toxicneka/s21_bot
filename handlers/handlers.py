@@ -8,7 +8,6 @@ from aiogram.types import BotCommand, Message, CallbackQuery, InlineKeyboardButt
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 import asyncio
-import requests
 import re
 from html import escape
 from config import MAIN_ADMIN_ID, login_token, password_token
@@ -303,83 +302,125 @@ async def cmd_guests(callback: CallbackQuery):
     await callback.message.answer('Форма гостя\nhttps://forms.yandex.ru/u/65320571068ff019572c037e/\nПорядок проведения гостей в кампус\nhttps://applicant.21-school.ru/guests')
     await callback.answer()
 
-async def get_access_token(login_token: str, password_token: str) -> str:
-    url = "https://auth.21-school.ru/auth/realms/EduPowerKeycloak/protocol/openid-connect/token"
-    headers = {'Content-Type': 'application/x-www-form-urlencoded'}
-    data = {
-        'client_id': 's21-open-api',
-        'username': login_token,
-        'password': password_token,
-        'grant_type': 'password'
-    }
-    response = requests.post(url, headers=headers, data=data)
-    if response.status_code == 200:
-        return response.json().get('access_token')
-    return None
+@dp.callback_query(F.data == "examples")
+async def cmd_guests(callback: CallbackQuery):
+    await callback.message.answer("""
+                                  Как взять продление?
+                                  """)
+    await callback.answer()
 
-async def get_cluster_info(cluster_id: str, token: str) -> dict:
-    url = f"https://platform.21-school.ru/services/21-school/api/v1/clusters/{cluster_id}/map?limit=100&offset=0"
-    headers = {'Authorization': f'Bearer {token}'}
-    response = requests.get(url, headers=headers)
-    if response.status_code == 200:
-        return response.json()
-    return None
+# async def get_access_token(login_token: str, password_token: str) -> str:
+#     url = "https://auth.21-school.ru/auth/realms/EduPowerKeycloak/protocol/openid-connect/token"
+#     headers = {'Content-Type': 'application/x-www-form-urlencoded'}
+#     data = {
+#         'client_id': 's21-open-api',
+#         'username': login_token,
+#         'password': password_token,
+#         'grant_type': 'password'
+#     }
+#     response = requests.post(url, headers=headers, data=data)
+#     if response.status_code == 200:
+#         return response.json().get('access_token')
+#     return None
+
+# async def get_cluster_info(cluster_id: str, token: str) -> dict:
+#     url = f"https://platform.21-school.ru/services/21-school/api/v1/clusters/{cluster_id}/map?limit=100&offset=0"
+#     headers = {'Authorization': f'Bearer {token}'}
+#     response = requests.get(url, headers=headers)
+#     if response.status_code == 200:
+#         return response.json()
+#     return None
 
 async def handle_campus_command(message: Message):
     if await check_ban(message.from_user.id, message=message):
         return
-
-    token = await get_access_token(login_token, password_token)
-    if not token:
-        await message.answer("Ошибка аутентификации ❌\n\nПроверьте логин и пароль")
+    
+    service = dp["google_sheets_service"]
+    
+    # Получаем кэшированные данные кампуса (БЕЗ вызова API если кэш свежий)
+    campus_data = await service.get_campus_data(force_refresh=False)
+    
+    if not campus_data or "cluster_map" not in campus_data:
+        await message.answer("🔄 Получаю данные о кампусе...")
+        # Пробуем обновить кэш
+        campus_data = await service.get_campus_data(force_refresh=True)
+    
+    if not campus_data or "cluster_map" not in campus_data:
+        await message.answer("❌ Не удалось получить данные о кампусе. Попробуйте позже.")
         return
-
+    
     cluster_id_to_name = {
         "36621": "ay",
         "36622": "er",
         "36623": "tu",
         "36624": "si"
     }
-
+    
     floors = [
-        {"clusters": ["36621", "36622"], "name": "2nd Floor"},
-        {"clusters": ["36623", "36624"], "name": "3rd Floor"}
+        {"clusters": ["36621", "36622"], "name": "2-й этаж"},
+        {"clusters": ["36623", "36624"], "name": "3-й этаж"}
     ]
-
+    
     floor_groups = []
-
-    # Собираем данные по этажам
+    cluster_map = campus_data["cluster_map"]
+    
+    # Собираем данные по этажам из кэша
+    total_peers = 0
     for floor in floors:
         floor_results = []
         for cluster_id in floor["clusters"]:
-            cluster_info = await get_cluster_info(cluster_id, token)
-            if cluster_info:
-                cluster_name = cluster_id_to_name.get(cluster_id)
-                for participant in cluster_info.get("clusterMap", []):
-                    login = participant.get("login")
-                    row = participant.get("row")
-                    number = participant.get("number")
-                    if login is not None:
+            if cluster_id in cluster_map:
+                cluster_name = cluster_id_to_name.get(cluster_id, cluster_id)
+                for participant in cluster_map[cluster_id]:
+                    login = participant.get("login", "")
+                    row = participant.get("row", "")
+                    number = participant.get("number", "")
+                    if login:
                         floor_results.append(f"👤  <b>{login}</b>   {cluster_name}-{row}{number}")
-
-        floor_results.sort(key=lambda x: x.split()[1].lower())
+                        total_peers += 1
+        
         if floor_results:
+            floor_results.sort(key=lambda x: x.split()[1].lower())
             floor_groups.append(floor_results)
-
-    # Добавляем разделитель между этажами
+    
+    # Формируем ответ
     results = []
     for i, group in enumerate(floor_groups):
         if i > 0:
             results.append("")  # Пустая строка как разделитель
         results.extend(group)
-
+    
     if results:
-        chunk_size = 100
-        for i in range(0, len(results), chunk_size):
-            chunk = "\n".join(results[i:i + chunk_size])
-            await message.answer(chunk, parse_mode="HTML")
+        # Добавляем заголовок
+        header = f"👥 <b>Людей в кампусе: {total_peers}</b>\n\n"
+        
+        chunk_size = 90  # Немного меньше, чтобы не превысить лимит
+        chunks = []
+        current_chunk = []
+        current_length = 0
+        
+        for line in results:
+            line_length = len(line) + 1  # +1 для символа новой строки
+            if current_length + line_length > chunk_size and current_chunk:
+                chunks.append("\n".join(current_chunk))
+                current_chunk = []
+                current_length = 0
+            
+            current_chunk.append(line)
+            current_length += line_length
+        
+        if current_chunk:
+            chunks.append("\n".join(current_chunk))
+        
+        # Отправляем первый чанк с заголовком
+        if chunks:
+            await message.answer(header + chunks[0], parse_mode="HTML")
+            
+            # Отправляем остальные чанки
+            for chunk in chunks[1:]:
+                await message.answer(chunk, parse_mode="HTML")
     else:
-        await message.answer("В кампусе никого нет 😭")
+        await message.answer("😴 В кампусе никого нет")
 
 # Обработчик для кнопки
 @dp.callback_query(F.data == "campus")

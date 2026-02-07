@@ -9,13 +9,16 @@ bot = Bot(token=TOKEN)
 
 async def main():
     # Инициализация Google Sheets сервиса
-    service = GoogleSheetsService(GOOGLE_SHEETS_CREDS, SPREADSHEET_KEY)
+    service = GoogleSheetsService(
+        GOOGLE_SHEETS_CREDS, 
+        SPREADSHEET_KEY,
+        login_token,
+        password_token
+    )
     await service.initialize()
 
     # Добавляем сервисы и данные в диспетчер
     dp["google_sheets_service"] = service
-    dp["login_token"] = login_token
-    dp["password_token"] = password_token
     dp["main_admin_id"] = int(MAIN_ADMIN_ID) if MAIN_ADMIN_ID else None
     dp.bot = bot
 

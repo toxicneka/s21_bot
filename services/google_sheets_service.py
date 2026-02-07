@@ -1,44 +1,255 @@
+
 import os
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 import asyncio
-import requests
+import aiohttp
 from datetime import datetime, timedelta
-from config import login_token, password_token
+from collections import defaultdict
 
 class GoogleSheetsService:
-    def __init__(self, creds_file, spreadsheet_key):
+    def __init__(self, creds_file, spreadsheet_key, login_token, password_token):
         self.scope = ['https://spreadsheets.google.com/feeds',
                      'https://www.googleapis.com/auth/drive']
         self.creds = ServiceAccountCredentials.from_json_keyfile_name(creds_file, self.scope)
         self.client = gspread.authorize(self.creds)
         self.sheet = self.client.open_by_key(spreadsheet_key).sheet1
         self.column_index = {}
-
-    async def initialize(self):
+        
+        # Токены для API Школы 21
+        self.login_token = login_token
+        self.password_token = password_token
+        
+        # КЭШ токена
+        self._access_token = None
+        self._token_expiry = None
+        
+        # КЭШ данных кампуса
+        self._campus_data_cache = None
+        self._cache_timestamp = None
+        self._cache_lock = asyncio.Lock()  # Блокировка для безопасного доступа к кэшу
+        
+        # Защита от спама - храним когда последний раз обновлялся кэш по запросу
+        self._last_api_call = None
+        self._min_cache_seconds = 30  # Минимальное время между обновлениями кэша
+        self._max_cache_seconds = 300  # Максимальное время жизни кэша (5 минут)
+        
+        # Счетчик для отладки
+        self.api_call_counter = {"token": 0, "campus": 0, "wanted": 0}
+        
+        # Кэш для отслеживаемых пиров
+        self._tracking_cache = None
+        self._tracking_cache_timestamp = None
+        
+    async def get_access_token(self) -> str:
+        """Получение токена с кэшированием"""
+        now = datetime.now()
+        
+        if (self._access_token and 
+            self._token_expiry and 
+            now < self._token_expiry):
+            return self._access_token
+        
+        print(f"[API] Получение нового токена... (запрос #{self.api_call_counter['token'] + 1})")
+        self.api_call_counter["token"] += 1
+        
+        url = "https://auth.21-school.ru/auth/realms/EduPowerKeycloak/protocol/openid-connect/token"
+        data = {
+            'client_id': 's21-open-api',
+            'username': self.login_token,
+            'password': self.password_token,
+            'grant_type': 'password'
+        }
+        
         try:
-            headers = self.sheet.row_values(1)
-            if not headers:
-                self.sheet.update('A1', [['user_id', 'login', 'name', 'telegram_username', 'wanted', 'notified']])
-                headers = self.sheet.row_values(1)
-
-            # Добавляем отсутствующие столбцы
-            new_columns = {'wanted': '', 'notified': 'FALSE'}
-            update_needed = False
-
-            for col, default_value in new_columns.items():
-                if col not in headers:
-                    headers.append(col)
-                    update_needed = True
-
-            if update_needed:
-                self.sheet.update([headers], 'A1')
-
-            # Создаем индекс столбцов
-            self.column_index = {header: idx for idx, header in enumerate(headers)}
-
+            async with aiohttp.ClientSession() as session:
+                async with session.post(url, data=data) as response:
+                    if response.status == 200:
+                        token_data = await response.json()
+                        self._access_token = token_data.get('access_token')
+                        expires_in = token_data.get('expires_in', 3600)
+                        self._token_expiry = now + timedelta(seconds=expires_in - 300)
+                        print(f"[API] Токен получен. Действителен до: {self._token_expiry}")
+                        return self._access_token
+                    else:
+                        text = await response.text()
+                        print(f"[API] Ошибка получения токена: {response.status}")
+                        return None
         except Exception as e:
-            print(f"Ошибка инициализации таблицы: {e}")
+            print(f"[API] Исключение при получении токена: {e}")
+            return None
+    
+    async def get_campus_data(self, force_refresh=False) -> dict:
+        """Получение данных кампуса с защитой от спама"""
+        now = datetime.now()
+        
+        async with self._cache_lock:
+            # Проверяем, можно ли использовать кэш
+            if (not force_refresh and 
+                self._campus_data_cache and 
+                self._cache_timestamp):
+                
+                cache_age = (now - self._cache_timestamp).total_seconds()
+                
+                # Если кэш свежий (меньше 30 секунд), возвращаем его
+                if cache_age < self._min_cache_seconds:
+                    print(f"[CACHE] Используем кэш кампуса (возраст: {cache_age:.0f} сек)")
+                    return self._campus_data_cache
+                
+                # Если кто-то недавно уже обновил кэш (меньше 30 секунд назад), ждем
+                if (self._last_api_call and 
+                    (now - self._last_api_call).total_seconds() < self._min_cache_seconds):
+                    print(f"[CACHE] Используем кэш (обновление было {self._min_cache_seconds} сек назад)")
+                    return self._campus_data_cache
+                
+                # Если кэш слишком старый (больше 5 минут), обновляем
+                if cache_age > self._max_cache_seconds:
+                    print(f"[CACHE] Кэш устарел ({cache_age:.0f} сек), требуется обновление")
+                    force_refresh = True
+            
+            # Если требуется обновление
+            if force_refresh or not self._campus_data_cache:
+                print(f"[API] Получение данных кампуса... (запрос #{self.api_call_counter['campus'] + 1})")
+                self.api_call_counter["campus"] += 1
+                self._last_api_call = now
+                
+                token = await self.get_access_token()
+                if not token:
+                    print("[API] Не удалось получить токен")
+                    return self._campus_data_cache or {}
+                
+                clusters = ["36621", "36622", "36623", "36624"]
+                cluster_id_to_name = {
+                    "36621": "ay",
+                    "36622": "er", 
+                    "36623": "tu",
+                    "36624": "si"
+                }
+                
+                present_logins = set()
+                cluster_map = {}
+                
+                try:
+                    headers = {'Authorization': f'Bearer {token}'}
+                    tasks = []
+                    for cluster_id in clusters:
+                        url = f"https://platform.21-school.ru/services/21-school/api/v1/clusters/{cluster_id}/map"
+                        tasks.append(self._fetch_cluster(url, headers, cluster_id))
+                    
+                    results = await asyncio.gather(*tasks)
+                    
+                    for i, result in enumerate(results):
+                        cluster_id = clusters[i]
+                        if not result:
+                            continue
+                            
+                        for participant in result.get("clusterMap", []):
+                            login = participant.get("login")
+                            if login:
+                                present_logins.add(login)
+                                if cluster_id not in cluster_map:
+                                    cluster_map[cluster_id] = []
+                                cluster_map[cluster_id].append({
+                                    "login": login,
+                                    "row": participant.get("row"),
+                                    "number": participant.get("number"),
+                                    "cluster_name": cluster_id_to_name.get(cluster_id, cluster_id)
+                                })
+                    
+                    # Сохраняем в кэш
+                    self._campus_data_cache = {
+                        "present_logins": present_logins,
+                        "cluster_map": cluster_map,
+                        "timestamp": now
+                    }
+                    self._cache_timestamp = now
+                    
+                    # Обновляем кэш для wanted
+                    await self._update_wanted_cache(present_logins)
+                    
+                    print(f"[API] Данные кампуса обновлены. Пиров: {len(present_logins)}")
+                    
+                except Exception as e:
+                    print(f"[API] Ошибка получения данных кампуса: {e}")
+            
+            return self._campus_data_cache or {}
+    
+    async def _update_wanted_cache(self, present_logins):
+        """Обновляет кэш для отслеживаемых пиров"""
+        try:
+            tracking_users = await self.get_all_tracking_users()
+            self._tracking_cache = {
+                "present_logins": present_logins,
+                "tracking_users": tracking_users,
+                "timestamp": datetime.now()
+            }
+            self._tracking_cache_timestamp = datetime.now()
+        except Exception as e:
+            print(f"[CACHE] Ошибка обновления кэша wanted: {e}")
+    
+    async def _fetch_cluster(self, url, headers, cluster_id):
+        """Запрос данных одного кластера"""
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, headers=headers) as response:
+                    if response.status == 200:
+                        return await response.json()
+                    else:
+                        print(f"[API] Ошибка кластера {cluster_id}: {response.status}")
+                        return None
+        except Exception as e:
+            print(f"[API] Ошибка запроса кластера {cluster_id}: {e}")
+            return None
+    
+    async def check_campus_periodically(self, bot):
+        """Периодическая проверка - раз в 5 минут, использует тот же кэш"""
+        print("[ПЕРИОДИЧЕСКАЯ ПРОВЕРКА] Запущена с интервалом 5 минут")
+        
+        while True:
+            try:
+                # Получаем обновленные данные кампуса
+                campus_data = await self.get_campus_data(force_refresh=True)
+                present_logins = campus_data.get("present_logins", set())
+                
+                if present_logins:
+                    # Используем кэшированные данные отслеживания
+                    if (self._tracking_cache and 
+                        self._tracking_cache_timestamp and 
+                        (datetime.now() - self._tracking_cache_timestamp).total_seconds() < 300):
+                        
+                        tracking_users = self._tracking_cache["tracking_users"]
+                    else:
+                        tracking_users = await self.get_all_tracking_users()
+                    
+                    notified_count = 0
+                    
+                    for user_id, wanted_login in tracking_users:
+                        user_data = await self.get_user_record(user_id)
+                        if not user_data:
+                            continue
+                        
+                        notified = user_data.get('notified', 'FALSE') == 'TRUE'
+                        
+                        if wanted_login in present_logins and not notified:
+                            try:
+                                await bot.send_message(
+                                    user_id,
+                                    f"🚨 Ваш отслеживаемый пир {wanted_login} сейчас в кампусе!"
+                                )
+                                await self.update_user_notified(user_id, True)
+                                notified_count += 1
+                            except Exception as e:
+                                print(f"Ошибка отправки уведомления {user_id}: {e}")
+                    
+                    if notified_count > 0:
+                        print(f"[УВЕДОМЛЕНИЯ] Отправлено {notified_count} уведомлений")
+                
+                print(f"[ПЕРИОДИЧЕСКАЯ ПРОВЕРКА] Ожидание 5 минут...")
+                await asyncio.sleep(300)
+                
+            except Exception as e:
+                print(f"[ПЕРИОДИЧЕСКАЯ ПРОВЕРКА] Ошибка: {e}")
+                await asyncio.sleep(60)
 
     async def is_user_in_db(self, user_id: int):
         records = self.sheet.get_all_records()
@@ -121,79 +332,6 @@ class GoogleSheetsService:
             for record in records
             if 'wanted' in record and record['wanted'] and 'notified' in record
         ]
-
-    async def get_access_token(self, login_token: str, password_token: str) -> str:
-        url = "https://auth.21-school.ru/auth/realms/EduPowerKeycloak/protocol/openid-connect/token"
-        headers = {'Content-Type': 'application/x-www-form-urlencoded'}
-        data = {
-            'client_id': 's21-open-api',
-            'username': login_token,
-            'password': password_token,
-            'grant_type': 'password'
-        }
-        response = requests.post(url, headers=headers, data=data)
-        if response.status_code == 200:
-            return response.json().get('access_token')
-        return None
-
-    async def get_cluster_info(self, cluster_id: str, token: str) -> dict:
-        url = f"https://platform.21-school.ru/services/21-school/api/v1/clusters/{cluster_id}/map?limit=100&offset=0"
-        headers = {'Authorization': f'Bearer {token}'}
-        response = requests.get(url, headers=headers)
-        if response.status_code == 200:
-            return response.json()
-        return None
-
-    async def check_campus_periodically(self, bot):
-        """Периодическая проверка присутствия пиров в кампусе."""
-        while True:
-            try:
-                # Получаем список присутствующих
-                token = await self.get_access_token(login_token, password_token)
-                if not token:
-                    await asyncio.sleep(60)
-                    continue
-
-                clusters = ["36621", "36622", "36623", "36624"]
-                present_logins = set()
-
-                for cluster_id in clusters:
-                    cluster_info = await self.get_cluster_info(cluster_id, token)
-                    if cluster_info:
-                        for participant in cluster_info.get("clusterMap", []):
-                            login = participant.get("login")
-                            if login:
-                                present_logins.add(login)
-
-                # Сохраняем в файл
-                with open("wanted.txt", "w") as f:
-                    f.write("\n".join(present_logins))
-
-                # Получаем пользователей для отслеживания
-                tracking_users = await self.get_all_tracking_users()
-
-                for user_id, wanted_login in tracking_users:
-                    # Проверяем нужно ли отправлять уведомление
-                    user_data = await self.get_user_record(user_id)
-                    if not user_data:
-                        continue
-
-                    notified = user_data.get('notified', 'FALSE') == 'TRUE'
-
-                    if wanted_login in present_logins and not notified:
-                        try:
-                            await bot.send_message(
-                                user_id,
-                                f"🚨 Ваш отслеживаемый пир {wanted_login} сейчас в кампусе!"
-                            )
-                            await self.update_user_notified(user_id, True)
-                        except Exception as e:
-                            print(f"Ошибка отправки уведомления {user_id}: {e}")
-
-            except Exception as e:
-                print(f"Ошибка в check_campus_periodically: {e}")
-
-            await asyncio.sleep(60)  # Проверка каждую минуту
 
     async def reset_notified_daily(self):
         """Ежедневный сброс флагов уведомлений."""
