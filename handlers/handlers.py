@@ -179,26 +179,62 @@ async def cmd_links(callback: CallbackQuery):
     await callback.message.answer('Полезные ссылки:', reply_markup=links_keyboard())
     await callback.answer()
 
-# Link handlers (kept minimal)
-link_mapping = {
-    "faq": ("FAQ Школы 21", "https://applicant.21-school.ru/faq"),
-    "rules": ("Правила Школы 21", "https://applicant.21-school.ru/rules_yak"),
-    "rocketchat": ("Правила Рокетчата", "https://applicant.21-school.ru/rocketchat"),
-    "internship_guide": ("Гайд по стажировке", "https://applicant.21-school.ru/internship_guide"),
-    "specialties": ("Список специальностей", "https://applicant.21-school.ru/specialties"),
-    "gigacode": ("GigaCode", "https://applicant.21-school.ru/gigacode"),
-    "p2p": ("Правила онлайн проверок", "https://applicant.21-school.ru/onlineeducation"),
-    "final": ("Что нужно для выпуска", "https://applicant.21-school.ru/final"),
-    "email": ("Почта Школы 21 YKS", "yks@21-school.ru\nhttps://applicant.21-school.ru/sla"),
-    "coins": ("Как зарабатывать коины", "https://applicant.21-school.ru/manual_points"),
-    "guests": ("Форма гостя", "https://forms.yandex.ru/u/65320571068ff019572c037e/\nhttps://applicant.21-school.ru/guests"),
-}
+# Удаляем цикл и возвращаем явные обработчики для каждой ссылки:
 
-for key, (title, content) in link_mapping.items():
-    @dp.callback_query(F.data == key)
-    async def handler(callback: CallbackQuery, key=key, title=title, content=content):
-        await callback.message.answer(f"{title}\n{content}")
-        await callback.answer()
+@dp.callback_query(F.data == "faq")
+async def cmd_faq(callback: CallbackQuery):
+    await callback.message.answer('FAQ Школы 21\nhttps://applicant.21-school.ru/faq')
+    await callback.answer()
+
+@dp.callback_query(F.data == "rules")
+async def cmd_rules(callback: CallbackQuery):
+    await callback.message.answer('Правила Школы 21\nhttps://applicant.21-school.ru/rules_yak')
+    await callback.answer()
+
+@dp.callback_query(F.data == "rocketchat")
+async def cmd_rocketchat(callback: CallbackQuery):
+    await callback.message.answer('Правила Рокетчата\nhttps://applicant.21-school.ru/rocketchat')
+    await callback.answer()
+
+@dp.callback_query(F.data == "internship_guide")
+async def cmd_internship_guide(callback: CallbackQuery):
+    await callback.message.answer('Гайд по стажировке\nhttps://applicant.21-school.ru/internship_guide')
+    await callback.answer()
+
+@dp.callback_query(F.data == "specialties")
+async def cmd_specialties(callback: CallbackQuery):
+    await callback.message.answer('Список специальностей для стажировки\nhttps://applicant.21-school.ru/specialties')
+    await callback.answer()
+
+@dp.callback_query(F.data == "gigacode")
+async def cmd_gigacode(callback: CallbackQuery):
+    await callback.message.answer('Общая позиция «Школы 21» в ИИ\nhttps://applicant.21-school.ru/gigacode')
+    await callback.answer()
+
+@dp.callback_query(F.data == "p2p")
+async def cmd_p2p(callback: CallbackQuery):
+    await callback.message.answer('Правила онлайн проверок\nhttps://applicant.21-school.ru/onlineeducation')
+    await callback.answer()
+
+@dp.callback_query(F.data == "final")
+async def cmd_final(callback: CallbackQuery):
+    await callback.message.answer('Что нужно для выпуска\nhttps://applicant.21-school.ru/final')
+    await callback.answer()
+
+@dp.callback_query(F.data == "email")
+async def cmd_email(callback: CallbackQuery):
+    await callback.message.answer('Почта Школы 21 YKS\nyks@21-school.ru\nПорядок отправки обращения\nhttps://applicant.21-school.ru/sla')
+    await callback.answer()
+
+@dp.callback_query(F.data == "coins")
+async def cmd_coins(callback: CallbackQuery):
+    await callback.message.answer('Как зарабатывать коины\nhttps://applicant.21-school.ru/manual_points')
+    await callback.answer()
+
+@dp.callback_query(F.data == "guests")
+async def cmd_guests(callback: CallbackQuery):
+    await callback.message.answer('Форма гостя\nhttps://forms.yandex.ru/u/65320571068ff019572c037e/\nПорядок проведения гостей в кампус\nhttps://applicant.21-school.ru/guests')
+    await callback.answer()
 
 # Campus
 async def handle_campus_command(message: Message):
@@ -326,7 +362,24 @@ async def handle_ref_command(message: Message):
 
 @dp.callback_query(F.data == "ref")
 async def cmd_ref_command(callback: CallbackQuery):
-    await handle_ref_command(callback.message)
+    """Обработчик реферальной ссылки"""
+    if await check_ban(callback.from_user.id, callback=callback):
+        return
+    # Получаем данные пользователя
+    user_data = await dp["google_sheets_service"].is_user_in_db(callback.from_user.id)
+
+    if user_data:
+        login = user_data[0]
+        ref_link = f"https://21-school.ru/?utm_source=school21&utm_medium=student_yak&utm_campaign={login}__"
+        await callback.message.answer(
+            f"🔗 Ваша реферальная ссылка:\n\n<code>{ref_link}</code>",
+            parse_mode="HTML"
+        )
+    else:
+        await callback.message.answer(
+            "Для получения реферальной ссылки необходимо пройти регистрацию 🚀",
+            reply_markup=registration_keyboard()
+        )
     await callback.answer()
 
 @dp.message(Command("ref"))
