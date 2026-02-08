@@ -326,8 +326,6 @@ async def handle_ref_command(message: Message):
 
 @dp.callback_query(F.data == "ref")
 async def cmd_ref_command(callback: CallbackQuery):
-    if await check_ban(callback.from_user.id, callback=callback):
-        return
     await handle_ref_command(callback.message)
     await callback.answer()
 
