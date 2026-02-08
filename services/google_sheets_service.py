@@ -140,22 +140,8 @@ class GoogleSheetsService:
                     
                     for i, result in enumerate(results):
                         cluster_id = clusters[i]
-                        cluster_name = cluster_id_to_name.get(cluster_id, cluster_id)
-                        
                         if not result:
-                            print(f"[API] Кластер {cluster_name} ({cluster_id}): Нет данных")
                             continue
-                        
-                        participants_count = len(result.get("clusterMap", []))
-                        print(f"[API] Кластер {cluster_name} ({cluster_id}): {participants_count} участников")
-                        
-                        # Выводим первые 5 логинов для диагностики
-                        if participants_count > 0:
-                            first_logins = []
-                            for p in result.get("clusterMap", [])[:5]:
-                                login = p.get("login")
-                                first_logins.append(login if login is not None else "no_login")
-                            print(f"[API]   Примеры логинов: {', '.join(first_logins)}")
                             
                         for participant in result.get("clusterMap", []):
                             login = participant.get("login")
@@ -170,8 +156,6 @@ class GoogleSheetsService:
                                     "cluster_name": cluster_id_to_name.get(cluster_id, cluster_id)
                                 })
                     
-                    print(f"[API] Всего уникальных логинов: {len(present_logins)}")
-                    
                     # Сохраняем в кэш
                     self._campus_data_cache = {
                         "present_logins": present_logins,
@@ -183,13 +167,10 @@ class GoogleSheetsService:
                     # Обновляем кэш для wanted
                     await self._update_wanted_cache(present_logins)
                     
-                    print(f"[API] Данные кампуса обновлены. Всего пиров: {len(present_logins)}")
-                    print(f"[API] Кластеры с данными: {', '.join(cluster_map.keys())}")
+                    print(f"[API] Данные кампуса обновлены. Пиров: {len(present_logins)}")
                     
                 except Exception as e:
                     print(f"[API] Ошибка получения данных кампуса: {e}")
-                    import traceback
-                    traceback.print_exc()
             
             return self._campus_data_cache or {}
     
@@ -209,20 +190,10 @@ class GoogleSheetsService:
     async def _fetch_cluster(self, url, headers, cluster_id):
         """Запрос данных одного кластера"""
         try:
-            print(f"[API] Запрос к кластеру {cluster_id}")
             async with aiohttp.ClientSession() as session:
                 async with session.get(url, headers=headers) as response:
                     if response.status == 200:
-                        data = await response.json()
-                        
-                        # ВРЕМЕННО: выведем структуру ответа для анализа
-                        if data and "clusterMap" in data and len(data["clusterMap"]) > 0:
-                            print(f"[DEBUG] Структура данных кластера {cluster_id}:")
-                            first_participant = data["clusterMap"][0]
-                            for key, value in first_participant.items():
-                                print(f"  {key}: {value}")
-                        
-                        return data
+                        return await response.json()
                     else:
                         print(f"[API] Ошибка кластера {cluster_id}: {response.status}")
                         return None
