@@ -241,62 +241,76 @@ async def handle_campus_command(message: Message):
     if await check_ban(message.from_user.id, message=message):
         return
     
-    campus_data = await dp["google_sheets_service"].get_campus_data(force_refresh=False)
+    service = dp["google_sheets_service"]
+    
+    # Получаем кэшированные данные кампуса
+    campus_data = await service.get_campus_data(force_refresh=False)
     
     if not campus_data or "cluster_map" not in campus_data:
         await message.answer("🔄 Получаю данные о кампусе...")
-        campus_data = await dp["google_sheets_service"].get_campus_data(force_refresh=True)
+        campus_data = await service.get_campus_data(force_refresh=True)
     
     if not campus_data or "cluster_map" not in campus_data:
-        return await message.answer("❌ Не удалось получить данные о кампусе")
+        await message.answer("❌ Не удалось получить данные о кампусе. Попробуйте позже.")
+        return
     
-    cluster_id_to_name = {"36621": "ay", "36622": "er", "36623": "tu", "36624": "si"}
-    floors = [{"clusters": ["36621", "36622"], "name": "2-й этаж"},
-              {"clusters": ["36623", "36624"], "name": "3-й этаж"}]
+    cluster_id_to_name = {
+        "36621": "ay",
+        "36622": "er",
+        "36623": "tu",
+        "36624": "si"
+    }
     
-    floor_groups, total_peers = [], 0
+    floors = [
+        {"clusters": ["36621", "36622"], "name": "2-й этаж"},
+        {"clusters": ["36623", "36624"], "name": "3-й этаж"}
+    ]
+    
+    floor_groups = []
     cluster_map = campus_data["cluster_map"]
     
+    # Собираем данные по этажам из кэша
+    total_peers = 0
     for floor in floors:
         floor_results = []
         for cluster_id in floor["clusters"]:
             if cluster_id in cluster_map:
                 cluster_name = cluster_id_to_name.get(cluster_id, cluster_id)
                 for participant in cluster_map[cluster_id]:
-                    if login := participant.get("login", ""):
-                        row, number = participant.get("row", ""), participant.get("number", "")
-                        floor_results.append(f"👤 <b>{login}</b> {cluster_name}-{row}{number}")
+                    login = participant.get("login", "")
+                    row = participant.get("row", "")
+                    number = participant.get("number", "")
+                    if login:
+                        floor_results.append(f"👤  <b>{login}</b>   {cluster_name}-{row}{number}")
                         total_peers += 1
         
         if floor_results:
             floor_results.sort(key=lambda x: x.split()[1].lower())
             floor_groups.append(floor_results)
     
-    if not floor_groups:
-        return await message.answer("😴 В кампусе никого нет")
+    # Формируем ответ
+    results = []
+    for i, group in enumerate(floor_groups):
+        if i > 0:
+            results.append("")  # Пустая строка как разделитель
+        results.extend(group)
     
-    header = f"👥 <b>Людей в кампусе: {total_peers}</b>\n\n"
-    all_lines = []
-    for group in floor_groups:
-        all_lines.extend(group)
-    
-    chunk_size = 90
-    chunks = []
-    current_chunk = []
-    
-    for line in all_lines:
-        if len("\n".join(current_chunk + [line])) > chunk_size and current_chunk:
-            chunks.append("\n".join(current_chunk))
-            current_chunk = []
-        current_chunk.append(line)
-    
-    if current_chunk:
-        chunks.append("\n".join(current_chunk))
-    
-    if chunks:
-        await message.answer(header + chunks[0], parse_mode="HTML")
-        for chunk in chunks[1:]:
-            await message.answer(chunk, parse_mode="HTML")
+    if results:
+        # Добавляем заголовок
+        header = f"👥 <b>Людей в кампусе: {total_peers}</b>\n\n"
+        
+        # Объединяем все результаты в одно сообщение
+        full_message = header + "\n".join(results)
+        
+        # Проверяем, не превышает ли сообщение лимит Telegram (4096 символов)
+        if len(full_message) <= 4096:
+            await message.answer(full_message, parse_mode="HTML")
+        else:
+            # Если превышает - разбиваем на части
+            await message.answer("Слишком много людей в кампусе для отображения в одном сообщении!")
+            
+    else:
+        await message.answer("😴 В кампусе никого нет")
 
 @dp.callback_query(F.data == "campus")
 async def cmd_campus_callback(callback: CallbackQuery):
