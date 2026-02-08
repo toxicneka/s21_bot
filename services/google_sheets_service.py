@@ -1,11 +1,8 @@
-
-import os
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 import asyncio
 import aiohttp
 from datetime import datetime, timedelta
-from collections import defaultdict
 
 class GoogleSheetsService:
     def __init__(self, creds_file, spreadsheet_key, login_token, password_token):
@@ -14,44 +11,26 @@ class GoogleSheetsService:
         self.creds = ServiceAccountCredentials.from_json_keyfile_name(creds_file, self.scope)
         self.client = gspread.authorize(self.creds)
         self.sheet = self.client.open_by_key(spreadsheet_key).sheet1
-        self.column_index = {}
         
-        # Токены для API Школы 21
         self.login_token = login_token
         self.password_token = password_token
         
-        # КЭШ токена
+        # Cache
         self._access_token = None
         self._token_expiry = None
-        
-        # КЭШ данных кампуса
         self._campus_data_cache = None
         self._cache_timestamp = None
-        self._cache_lock = asyncio.Lock()  # Блокировка для безопасного доступа к кэшу
+        self._cache_lock = asyncio.Lock()
         
-        # Защита от спама - храним когда последний раз обновлялся кэш по запросу
-        self._last_api_call = None
-        self._min_cache_seconds = 30  # Минимальное время между обновлениями кэша
-        self._max_cache_seconds = 300  # Максимальное время жизни кэша (5 минут)
-        
-        # Счетчик для отладки
-        self.api_call_counter = {"token": 0, "campus": 0, "wanted": 0}
-        
-        # Кэш для отслеживаемых пиров
-        self._tracking_cache = None
-        self._tracking_cache_timestamp = None
-        
+        # Cache timing
+        self._min_cache_seconds = 30
+        self._max_cache_seconds = 300
+    
     async def get_access_token(self) -> str:
-        """Получение токена с кэшированием"""
         now = datetime.now()
         
-        if (self._access_token and 
-            self._token_expiry and 
-            now < self._token_expiry):
+        if (self._access_token and self._token_expiry and now < self._token_expiry):
             return self._access_token
-        
-        print(f"[API] Получение нового токена... (запрос #{self.api_call_counter['token'] + 1})")
-        self.api_call_counter["token"] += 1
         
         url = "https://auth.21-school.ru/auth/realms/EduPowerKeycloak/protocol/openid-connect/token"
         data = {
@@ -69,64 +48,27 @@ class GoogleSheetsService:
                         self._access_token = token_data.get('access_token')
                         expires_in = token_data.get('expires_in', 3600)
                         self._token_expiry = now + timedelta(seconds=expires_in - 300)
-                        print(f"[API] Токен получен. Действителен до: {self._token_expiry}")
                         return self._access_token
-                    else:
-                        text = await response.text()
-                        print(f"[API] Ошибка получения токена: {response.status}")
-                        return None
-        except Exception as e:
-            print(f"[API] Исключение при получении токена: {e}")
+        except:
             return None
     
     async def get_campus_data(self, force_refresh=False) -> dict:
-        """Получение данных кампуса с защитой от спама"""
         now = datetime.now()
         
         async with self._cache_lock:
-            # Проверяем, можно ли использовать кэш
-            if (not force_refresh and 
-                self._campus_data_cache and 
-                self._cache_timestamp):
-                
+            if (not force_refresh and self._campus_data_cache and self._cache_timestamp):
                 cache_age = (now - self._cache_timestamp).total_seconds()
-                
-                # Если кэш свежий (меньше 30 секунд), возвращаем его
                 if cache_age < self._min_cache_seconds:
-                    print(f"[CACHE] Используем кэш кампуса (возраст: {cache_age:.0f} сек)")
                     return self._campus_data_cache
-                
-                # Если кто-то недавно уже обновил кэш (меньше 30 секунд назад), ждем
-                if (self._last_api_call and 
-                    (now - self._last_api_call).total_seconds() < self._min_cache_seconds):
-                    print(f"[CACHE] Используем кэш (обновление было {self._min_cache_seconds} сек назад)")
-                    return self._campus_data_cache
-                
-                # Если кэш слишком старый (больше 5 минут), обновляем
                 if cache_age > self._max_cache_seconds:
-                    print(f"[CACHE] Кэш устарел ({cache_age:.0f} сек), требуется обновление")
                     force_refresh = True
             
-            # Если требуется обновление
             if force_refresh or not self._campus_data_cache:
-                print(f"[API] Получение данных кампуса... (запрос #{self.api_call_counter['campus'] + 1})")
-                self.api_call_counter["campus"] += 1
-                self._last_api_call = now
-                
                 token = await self.get_access_token()
                 if not token:
-                    print("[API] Не удалось получить токен")
                     return self._campus_data_cache or {}
                 
                 clusters = ["36621", "36622", "36623", "36624"]
-                cluster_id_to_name = {
-                    "36621": "ay",
-                    "36622": "er", 
-                    "36623": "tu",
-                    "36624": "si"
-                }
-                
-                present_logins = set()
                 cluster_map = {}
                 
                 try:
@@ -144,84 +86,41 @@ class GoogleSheetsService:
                             continue
                             
                         for participant in result.get("clusterMap", []):
-                            login = participant.get("login")
-                            if login:
-                                present_logins.add(login)
+                            if login := participant.get("login"):
                                 if cluster_id not in cluster_map:
                                     cluster_map[cluster_id] = []
                                 cluster_map[cluster_id].append({
                                     "login": login,
                                     "row": participant.get("row"),
-                                    "number": participant.get("number"),
-                                    "cluster_name": cluster_id_to_name.get(cluster_id, cluster_id)
+                                    "number": participant.get("number")
                                 })
                     
-                    # Сохраняем в кэш
-                    self._campus_data_cache = {
-                        "present_logins": present_logins,
-                        "cluster_map": cluster_map,
-                        "timestamp": now
-                    }
+                    self._campus_data_cache = {"cluster_map": cluster_map}
                     self._cache_timestamp = now
                     
-                    # Обновляем кэш для wanted
-                    await self._update_wanted_cache(present_logins)
-                    
-                    print(f"[API] Данные кампуса обновлены. Пиров: {len(present_logins)}")
-                    
-                except Exception as e:
-                    print(f"[API] Ошибка получения данных кампуса: {e}")
+                except:
+                    pass
             
             return self._campus_data_cache or {}
     
-    async def _update_wanted_cache(self, present_logins):
-        """Обновляет кэш для отслеживаемых пиров"""
-        try:
-            tracking_users = await self.get_all_tracking_users()
-            self._tracking_cache = {
-                "present_logins": present_logins,
-                "tracking_users": tracking_users,
-                "timestamp": datetime.now()
-            }
-            self._tracking_cache_timestamp = datetime.now()
-        except Exception as e:
-            print(f"[CACHE] Ошибка обновления кэша wanted: {e}")
-    
     async def _fetch_cluster(self, url, headers, cluster_id):
-        """Запрос данных одного кластера"""
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.get(url, headers=headers) as response:
                     if response.status == 200:
                         return await response.json()
-                    else:
-                        print(f"[API] Ошибка кластера {cluster_id}: {response.status}")
-                        return None
-        except Exception as e:
-            print(f"[API] Ошибка запроса кластера {cluster_id}: {e}")
+        except:
             return None
     
     async def check_campus_periodically(self, bot):
-        """Периодическая проверка - раз в 5 минут, использует тот же кэш"""
-        print("[ПЕРИОДИЧЕСКАЯ ПРОВЕРКА] Запущена с интервалом 5 минут")
-        
         while True:
             try:
-                # Получаем обновленные данные кампуса
                 campus_data = await self.get_campus_data(force_refresh=True)
-                present_logins = campus_data.get("present_logins", set())
+                present_logins = {p["login"] for cluster in campus_data.get("cluster_map", {}).values() 
+                                for p in cluster}
                 
                 if present_logins:
-                    # Используем кэшированные данные отслеживания
-                    if (self._tracking_cache and 
-                        self._tracking_cache_timestamp and 
-                        (datetime.now() - self._tracking_cache_timestamp).total_seconds() < 300):
-                        
-                        tracking_users = self._tracking_cache["tracking_users"]
-                    else:
-                        tracking_users = await self.get_all_tracking_users()
-                    
-                    notified_count = 0
+                    tracking_users = await self.get_all_tracking_users()
                     
                     for user_id, wanted_login in tracking_users:
                         user_data = await self.get_user_record(user_id)
@@ -237,18 +136,12 @@ class GoogleSheetsService:
                                     f"🚨 Ваш отслеживаемый пир {wanted_login} сейчас в кампусе!"
                                 )
                                 await self.update_user_notified(user_id, True)
-                                notified_count += 1
-                            except Exception as e:
-                                print(f"Ошибка отправки уведомления {user_id}: {e}")
-                    
-                    if notified_count > 0:
-                        print(f"Отправлено {notified_count} уведомлений")
+                            except:
+                                pass
                 
-                print(f"[ПЕРИОДИЧЕСКАЯ ПРОВЕРКА] Ожидание 5 минут...")
                 await asyncio.sleep(300)
                 
-            except Exception as e:
-                print(f"[ПЕРИОДИЧЕСКАЯ ПРОВЕРКА] Ошибка: {e}")
+            except:
                 await asyncio.sleep(60)
 
     async def is_user_in_db(self, user_id: int):
@@ -289,7 +182,6 @@ class GoogleSheetsService:
         return [record['user_id'] for record in records]
 
     async def get_user_record(self, user_id: int) -> dict:
-        """Возвращает запись пользователя как словарь или None."""
         all_values = self.sheet.get_all_values()
         if not all_values:
             return None
@@ -300,32 +192,37 @@ class GoogleSheetsService:
         return None
 
     async def update_user_wanted(self, user_id: int, wanted_login: str):
-        """Обновляет столбец 'wanted' для пользователя."""
         record = await self.get_user_record(user_id)
         if not record:
             return False
 
         row_idx = list(self.sheet.col_values(1)).index(str(user_id)) + 1
-        col_idx = list(self.column_index.keys()).index('wanted') + 1
-
-        self.sheet.update_cell(row_idx, col_idx, wanted_login)
-        self.sheet.update_cell(row_idx, self.column_index['notified'] + 1, "FALSE")
-        return True
+        col_idx = self.sheet.row_values(1).index('wanted') + 1 if 'wanted' in self.sheet.row_values(1) else None
+        
+        if col_idx:
+            self.sheet.update_cell(row_idx, col_idx, wanted_login)
+            
+            notified_idx = self.sheet.row_values(1).index('notified') + 1 if 'notified' in self.sheet.row_values(1) else None
+            if notified_idx:
+                self.sheet.update_cell(row_idx, notified_idx, "FALSE")
+            
+            return True
+        return False
 
     async def update_user_notified(self, user_id: int, notified: bool):
-        """Обновляет столбец 'notified' для пользователя."""
         record = await self.get_user_record(user_id)
         if not record:
             return False
 
         row_idx = list(self.sheet.col_values(1)).index(str(user_id)) + 1
-        col_idx = list(self.column_index.keys()).index('notified') + 1
-
-        self.sheet.update_cell(row_idx, col_idx, "TRUE" if notified else "FALSE")
-        return True
+        col_idx = self.sheet.row_values(1).index('notified') + 1 if 'notified' in self.sheet.row_values(1) else None
+        
+        if col_idx:
+            self.sheet.update_cell(row_idx, col_idx, "TRUE" if notified else "FALSE")
+            return True
+        return False
 
     async def get_all_tracking_users(self):
-        """Возвращает список кортежей (user_id, wanted_login) для отслеживания."""
         records = self.sheet.get_all_records()
         return [
             (int(record['user_id']), record['wanted'])
@@ -334,18 +231,15 @@ class GoogleSheetsService:
         ]
 
     async def reset_notified_daily(self):
-        """Ежедневный сброс флагов уведомлений."""
         while True:
             now = datetime.now()
-            # Вычисляем время до следующего сброса (00:01)
             next_reset = (now + timedelta(days=1)).replace(hour=0, minute=1, second=0)
             wait_seconds = (next_reset - now).total_seconds()
 
             await asyncio.sleep(wait_seconds)
 
-            # Сбрасываем флаги для всех пользователей
-            all_records = self.sheet.get_all_records()
-            for record in all_records:
+            records = self.sheet.get_all_records()
+            for record in records:
                 if 'user_id' in record and 'notified' in record:
                     try:
                         user_id = int(record['user_id'])
@@ -354,31 +248,22 @@ class GoogleSheetsService:
                         continue
 
     async def initialize(self):
-        """Инициализация таблицы: проверка заголовков и создание индекса столбцов"""
         try:
             headers = self.sheet.row_values(1)
             if not headers:
-                # Если таблица пустая, создаем заголовки
                 self.sheet.update('A1', [['user_id', 'login', 'name', 'telegram_username', 'wanted', 'notified']])
                 headers = self.sheet.row_values(1)
 
-            # Добавляем отсутствующие столбцы если нужно
             new_columns = {'wanted': '', 'notified': 'FALSE'}
             update_needed = False
 
-            for col, default_value in new_columns.items():
+            for col in new_columns:
                 if col not in headers:
                     headers.append(col)
                     update_needed = True
 
             if update_needed:
                 self.sheet.update([headers], 'A1')
-
-            # Создаем индекс столбцов для быстрого доступа
-            self.column_index = {header: idx for idx, header in enumerate(headers)}
-            
-            print(f"[INIT] Таблица инициализирована. Столбцы: {', '.join(headers)}")
-            
+                
         except Exception as e:
-            print(f"[ERROR] Ошибка инициализации таблицы: {e}")
             raise e

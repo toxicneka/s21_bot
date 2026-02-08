@@ -1,8 +1,7 @@
-from aiogram.types import BotCommand, InlineKeyboardButton, InlineKeyboardMarkup, Message
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message, BotCommand
 from aiogram import Bot
-from html import escape
-import asyncio
 
+# Keyboards
 def menu_keyboard():
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="Регистрация 📝", callback_data="register")],
@@ -22,11 +21,10 @@ def links_keyboard():
         [InlineKeyboardButton(text="Список специальностей 📕", callback_data="specialties")],
         [InlineKeyboardButton(text="GigaCode 🤖", callback_data="gigacode")],
         [InlineKeyboardButton(text="Правила онлайн проверок 🤼‍♂️", callback_data="p2p")],
-        # [InlineKeyboardButton(text="Code Review 📋", callback_data="codereview")],
         [InlineKeyboardButton(text="Выпуск школы 🎓", callback_data="final")],
         [InlineKeyboardButton(text="Как получить коины 💰", callback_data="coins")],
         [InlineKeyboardButton(text="Форма гостя 🎫", callback_data="guests")],
-        [InlineKeyboardButton(text="Почта якутского кампуса Школы 21", callback_data="email")],
+        [InlineKeyboardButton(text="Почта якутского кампуса", callback_data="email")],
         [InlineKeyboardButton(text="Назад ↩️", callback_data="back")]
     ])
 
@@ -54,16 +52,13 @@ def broadcast_decision_keyboard():
         ]]
     )
 
+# Functions
 async def send_menu(message: Message):
-    await message.answer(
-        'Выберите пункты меню:',
-        reply_markup=menu_keyboard()
-    )
+    await message.answer('Выберите пункты меню:', reply_markup=menu_keyboard())
 
 BANNED_USERS_FILE = "banned_users.txt"
 
 def load_banned_users():
-    """Загружает список забаненных пользователей из файла."""
     try:
         with open(BANNED_USERS_FILE, "r") as file:
             return set(map(int, file.read().splitlines()))
@@ -71,24 +66,20 @@ def load_banned_users():
         return set()
 
 def save_banned_users(banned_users):
-    """Сохраняет список забаненных пользователей в файл."""
     with open(BANNED_USERS_FILE, "w") as file:
         file.write("\n".join(map(str, banned_users)))
 
 def add_banned_user(user_id):
-    """Добавляет пользователя в список забаненных."""
     banned_users = load_banned_users()
     banned_users.add(user_id)
     save_banned_users(banned_users)
 
 def remove_banned_user(user_id):
-    """Удаляет пользователя из списка забаненных."""
     banned_users = load_banned_users()
     banned_users.discard(user_id)
     save_banned_users(banned_users)
 
 def is_user_banned(user_id):
-    """Проверяет, забанен ли пользователь."""
     return user_id in load_banned_users()
 
 async def check_ban(user_id: int, message: Message = None, callback = None):
@@ -112,20 +103,12 @@ async def send_media_preview(media_message: Message, chat_id: int):
         await media_message.bot.send_video(chat_id, media_message.video.file_id, caption=media_message.caption)
 
 async def set_main_menu(bot: Bot):
-    # Создаем список с командами и их описанием для кнопки menu
     main_menu_commands = [
-        BotCommand(command='/links',
-                   description='Полезные ссылки 📚'),
-        BotCommand(command='/search',
-                   description='Поиск пира в тг 🕵️‍♂️'),
-        BotCommand(command='/ping',
-                   description='Напомнить о проверке 🔔'),
-        BotCommand(command='/campus',
-                   description='Кто в кампусе 👀'),
-        BotCommand(command='/ref',
-                   description='Реферальная ссылка ✉️'),
-        BotCommand(command='/wanted',
-                   description='Отслеживать пира 🐈'),
+        BotCommand(command='/links', description='Полезные ссылки 📚'),
+        BotCommand(command='/search', description='Поиск пира в тг 🕵️‍♂️'),
+        BotCommand(command='/ping', description='Напомнить о проверке 🔔'),
+        BotCommand(command='/campus', description='Кто в кампусе 👀'),
+        BotCommand(command='/ref', description='Реферальная ссылка ✉️'),
+        BotCommand(command='/wanted', description='Отслеживать пира 🐈'),
     ]
-
     await bot.set_my_commands(main_menu_commands)
